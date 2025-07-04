@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
+	"syscall"
 
 	"github.com/maatko/gowindcss/internal/tailwind"
 )
@@ -26,11 +28,31 @@ func main() {
 		return
 	}
 
+	fmt.Println(os.Args[1:])
 	command := exec.Command(binaryPath, os.Args[1:]...)
 
 	command.Dir = dir
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
 
-	command.Run()
+	err = command.Start()
+	if err != nil {
+		fmt.Println("Failed to start tailwindcss command:", err.Error())
+		return
+	}
+
+	fmt.Println("TailwindCSS process started. Press Ctrl+C to stop.")
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	<-sigChan // Wait for a signal
+
+	if command.Process != nil {
+		err = command.Process.Signal(syscall.SIGTERM)
+		if err != nil {
+			command.Process.Kill()
+		}
+		command.Process.Wait()
+	}
 }
